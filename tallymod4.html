@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>G-5600UE | Eternal Decay Tactical</title>
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <script>
+        const savedMode = localStorage.getItem('decay_theme');
+        if (savedMode === 'dark' || (!savedMode && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+            document.documentElement.classList.add('dark-mode');
+        }
+    </script>
+    <style>
+        :root {
+            --bg-color: #f4f4f9; --text-color: #1a1a1a; --muted-text: #666; --panel-bg: #ffffff;
+            --bar-bg: #eee; --decayed-purple: #6A0DAD; --accent-red: #d00000; --future-green: #2ecc71;
+            /* Inverted Gradient: Green to Red */
+            --decay-gradient: linear-gradient(to right, #32cd32, #ffd700, #ff0000, #8b0000);
+        }
+        html.dark-mode {
+            --bg-color: #121212; --text-color: #00ff41; --muted-text: #008f11; --panel-bg: #1a1a1a;
+            --bar-bg: #002200; --decayed-purple: #9932CC;
+            --decay-gradient: linear-gradient(to right, #004400, #444400, #660000, #440000);
+        }
+        * { box-sizing: border-box; font-family: 'Courier New', Courier, monospace; }
+        body { display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; background-color: var(--bg-color); color: var(--text-color); padding: 20px; }
+        .instrument-panel { width: 95%; max-width: 1200px; border: 2px solid var(--text-color); padding: 30px; background: var(--panel-bg); box-shadow: 10px 10px 0px rgba(0,0,0,0.1); }
+        .header-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--text-color); padding-bottom: 20px; margin-bottom: 20px; }
+        .analog-box { width: 100px; height: 100px; position: relative; }
+        .hand { transform-origin: center; transition: none; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+        .metric-card { border: 1px solid var(--text-color); padding: 10px; background: var(--bg-color); }
+        .m-label { font-size: 0.7em; font-weight: bold; display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .m-bar-bg { height: 8px; background: var(--bar-bg); position: relative; overflow: hidden; }
+        .m-fill { height: 100%; background: var(--decayed-purple); width: 0%; transition: width 0.5s; }
+        .main-progress-wrapper { position: relative; margin-bottom: 40px; }
+        #status-display { font-size: 2.3em; font-weight: 900; margin-bottom: 10px; text-align: center; }
+        
+        /* THE DEPLETING BAR LOGIC */
+        .progress-bar-container { width: 100%; height: 75px; background: var(--decay-gradient); border: 2px solid var(--text-color); position: relative; overflow: hidden; }
+        /* The mask is now on the LEFT, and we grow it to cover the color as time passes */
+        #progress-mask { position: absolute; left: 0; top: 0; bottom: 0; background-color: var(--panel-bg); width: 0%; border-right: 3px solid var(--text-color); z-index: 2; }
+        
+        .ruler { position: relative; height: 35px; margin-top: 5px; width: 100%; }
+        .tick { position: absolute; width: 1px; background: var(--text-color); height: 12px; transform: translateX(-50%); }
+        .tick.major { height: 20px; width: 2px; }
+        .tick-label { position: absolute; font-size: 0.7em; transform: translateX(-50%); top: 22px; font-weight: bold; }
+        details { border: 2px solid var(--text-color); margin-top: 20px; }
+        summary { padding: 15px; cursor: pointer; font-weight: bold; background: var(--text-color); color: var(--panel-bg); text-align: center; }
+        .pomo-grid { display: grid; grid-template-columns: 1.2fr 1fr 2fr; gap: 20px; padding: 20px; }
+        .log-container { border: 1px solid var(--text-color); height: 300px; display: flex; flex-direction: column; }
+        .log-body { flex: 1; overflow-y: auto; padding: 10px; font-size: 0.8em; background: var(--bg-color); }
+        .log-entry { border-bottom: 1px dashed var(--text-color); padding: 5px 0; display: flex; justify-content: space-between; }
+        .circle-visuals { display: flex; justify-content: space-around; align-items: center; background: var(--bg-color); border: 1px solid var(--text-color); }
+        .circle-unit { text-align: center; padding: 10px; }
+        .timer-svg { transform: rotate(-90deg); }
+        .c-bg { fill: none; stroke: var(--bar-bg); stroke-width: 4; }
+        .c-fill { fill: var(--text-color); transition: r 0.3s, fill 0.5s; }
+        #annual-heatmap-grid { display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 20px; padding: 20px; border-top: 1px dashed var(--text-color); }
+        .month-col { display: flex; flex-direction: column; align-items: center; }
+        .month-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; border: 1px solid var(--text-color); padding: 2px; margin-bottom: 5px;}
+        .dot { width: 6px; height: 6px; border-radius: 50%; }
+        .dot.past { background: var(--decayed-purple); }
+        .dot.future { border: 1px solid var(--text-color); opacity: 0.2; }
+        .dot.today { background: #ffff00; border: 1px solid #000; box-shadow: 0 0 5px #ffff00; }
+        #mode-toggle { position: fixed; top: 15px; right: 15px; width: 45px; height: 45px; cursor: pointer; border: 2px solid var(--text-color); background: var(--panel-bg); color: var(--text-color); border-radius: 50%; z-index: 1000; font-size: 1.2em; }
+    </style>
+</head>
+<body>
+
+    <button id="mode-toggle">☀️</button>
+
+    <div class="instrument-panel">
+        <header class="header-row">
+            <div class="analog-box">
+                <svg viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="45" fill="none" stroke="var(--text-color)" stroke-width="2"/>
+                    <line id="h-hand" class="hand" x1="50" y1="50" x2="50" y2="28" stroke="var(--text-color)" stroke-width="5" stroke-linecap="round"/>
+                    <line id="m-hand" class="hand" x1="50" y1="50" x2="50" y2="15" stroke="var(--future-green)" stroke-width="3" stroke-linecap="round"/>
+                    <circle cx="50" cy="50" r="3" fill="var(--text-color)"/>
+                </svg>
+            </div>
+            <div style="flex-grow: 1; padding-left: 25px;">
+                <h1 id="day-of-week" style="margin:0; font-size: 2.2em; letter-spacing: -1px;">---</h1>
+                <div id="detailed-year-stats" style="font-size: 0.9em; margin-top: 5px; color: var(--muted-text);">
+                    (<span style="color:var(--decayed-purple); font-weight:bold;" id="days-spent">0</span> days spent, 
+                    <span id="days-rem">0</span> days remaining in <span id="current-year">2026</span> — 
+                    <span id="year-perc">0.00%</span> elapsed)
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div id="digital-clock" style="font-size: 2em; font-weight: 900;">00:00:00</div>
+                <div id="live-status-sub" style="font-size: 0.65em; font-weight: bold; opacity: 0.8;">INITIALIZING...</div>
+            </div>
+        </header>
+
+        <div class="metrics-grid">
+            <div class="metric-card"><div class="m-label">WEEK <span id="w-val">0%</span></div><div class="m-bar-bg"><div id="w-fill" class="m-fill"></div></div></div>
+            <div class="metric-card"><div class="m-label">MONTH <span id="m-val">0%</span></div><div class="m-bar-bg"><div id="m-fill" class="m-fill"></div></div></div>
+            <div class="metric-card"><div class="m-label">QUARTER <span id="q-val">Q? 0%</span></div><div class="m-bar-bg"><div id="q-fill" class="m-fill"></div></div></div>
+        </div>
+
+        <div class="main-progress-wrapper">
+            <div id="status-display">100% REMAINING (0 Minutes Remaining)</div>
+            <div class="progress-bar-container"><div id="progress-mask"></div></div>
+            <div class="ruler" id="ruler-engine"></div>
+        </div>
+
+        <details open>
+            <summary>OPEN POMODORO & GLOBAL VISTA</summary>
+            <div class="pomo-grid">
+                <div class="log-container">
+                    <div style="background:var(--text-color); color:var(--panel-bg); padding:8px 10px; font-size:0.75em; display:flex; justify-content:space-between; font-weight:bold;">
+                        <span>SESSION LOG</span>
+                        <span>TOTAL: <span id="total-pomo-mins">0</span>m</span>
+                    </div>
+                    <div id="pomo-log-body" class="log-body"></div>
+                </div>
+
+                <div class="controls">
+                    <h3 style="margin-top:0; font-size: 0.9em;">Enter Minute Blocks</h3>
+                    <select id="pomo-select" style="width:100%; padding:10px; margin:5px 0 15px 0; border:2px solid var(--text-color); font-weight:bold;"></select>
+                    <button id="pomo-start" style="width:100%; padding:14px; background:#4CAF50; color:#fff; border:none; font-weight:bold; cursor:pointer; margin-bottom:10px; border-radius:4px;">START</button>
+                    <button id="pomo-stop" style="width:100%; padding:14px; background:#f44336; color:#fff; border:none; font-weight:bold; cursor:pointer; border-radius:4px;">STOP / YIELD</button>
+                    
+                    <div id="active-pomo-stats" style="margin-top:20px; display:none; background:var(--bg-color); padding:10px; border:1px solid var(--text-color);">
+                        <div style="font-size:0.65em; font-weight:bold; color:var(--muted-text);">CURRENT TIMER</div>
+                        <div id="pomo-timer-text" style="font-size:1.2em; font-weight:bold;">0m 00s / 0m</div>
+                        <div style="font-size:0.65em; font-weight:bold; color:var(--muted-text); margin-top:8px;">BLOCKS COMPLETED</div>
+                        <div id="pomo-count-text" style="font-size:1.2em; font-weight:bold;">0</div>
+                    </div>
+                </div>
+
+                <div class="circle-visuals">
+                    <div class="circle-unit">
+                        <svg width="150" height="150" class="timer-svg">
+                            <circle class="c-bg" cx="75" cy="75" r="70"/>
+                            <circle id="pomo-c-fill" class="c-fill" cx="75" cy="75" r="70"/>
+                        </svg>
+                        <div style="font-size:0.7em; font-weight:bold; margin-top:8px; text-transform:uppercase;">Block Decay</div>
+                    </div>
+                    <div class="circle-unit">
+                        <svg width="150" height="150" class="timer-svg">
+                            <circle class="c-bg" cx="75" cy="75" r="70"/>
+                            <circle id="global-c-fill" class="c-fill" cx="75" cy="75" r="70"/>
+                        </svg>
+                        <div style="font-size:0.7em; font-weight:bold; margin-top:8px; text-transform:uppercase;">Global Day Decay</div>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <div id="annual-heatmap-grid"></div>
+    </div>
+
+    <script>
+        const START_H = 6, END_H = 23, TOTAL_M = (END_H - START_H) * 60;
+        let dailyTotal = parseInt(localStorage.getItem('decay_dailyTotal')) || 0;
+        let pomoStart = localStorage.getItem('decay_pomoStart') ? parseInt(localStorage.getItem('decay_pomoStart')) : null;
+        let lastMinute = -1;
+
+        const sel = document.getElementById('pomo-select');
+        for(let i=1; i<=60; i++) {
+            let opt = document.createElement('option'); opt.value = i; opt.textContent = `${i} Minutes`;
+            if(i === 25) opt.selected = true; sel.appendChild(opt);
+        }
+
+        function getDecayColor(perc) {
+            const isDark = document.documentElement.classList.contains('dark-mode');
+            const hue = perc * 1.2; // 100% = 120 (Green), 0% = 0 (Red)
+            const lightness = isDark ? 50 : 40;
+            return `hsl(${hue}, 100%, ${lightness}%)`;
+        }
+
+        function getQuarterInfo(date) {
+            const month = date.getMonth();
+            const quarter = Math.floor(month / 3) + 1;
+            const qStart = new Date(date.getFullYear(), (quarter - 1) * 3, 1);
+            const qEnd = new Date(date.getFullYear(), (quarter - 1) * 3 + 3, 0);
+            const total = Math.floor((qEnd - qStart) / 86400000) + 1;
+            const elapsed = Math.floor((date - qStart) / 86400000) + 1;
+            return { q: quarter, p: (elapsed / total) * 100 };
+        }
+
+        function update() {
+            const now = new Date();
+            const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+
+            document.getElementById('digital-clock').textContent = now.toLocaleTimeString('en-GB');
+            document.getElementById('h-hand').setAttribute('transform', `rotate(${(h % 12) * 30 + (m * 0.5)})`);
+            document.getElementById('m-hand').setAttribute('transform', `rotate(${m * 6})`);
+
+            let curMins = (h < START_H) ? 0 : (h >= END_H) ? TOTAL_M : (h * 60 + m) - (START_H * 60);
+            const consumedPct = (curMins / TOTAL_M) * 100;
+            const remainingMins = TOTAL_M - curMins;
+            
+            // MASK LOGIC: As consumedPct grows, the mask width grows, covering the "fresh" green side first.
+            document.getElementById('progress-mask').style.width = consumedPct + '%';
+            document.getElementById('status-display').textContent = `${Math.round(100 - consumedPct)}% REMAINING (${remainingMins} Minutes Left)`;
+            document.getElementById('live-status-sub').textContent = `TIME: ${now.toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})} | DEPLETION: ${consumedPct.toFixed(1)}%`;
+            
+            const gFill = document.getElementById('global-c-fill');
+            gFill.setAttribute('r', ((100 - consumedPct) / 100) * 70);
+            gFill.style.fill = getDecayColor(100 - consumedPct);
+
+            if (pomoStart) {
+                document.getElementById('active-pomo-stats').style.display = 'block';
+                const elapTotalSec = Math.floor((Date.now() - pomoStart) / 1000);
+                const blockMins = parseInt(sel.value);
+                const blockSec = blockMins * 60;
+                
+                const curBlockSec = elapTotalSec % blockSec;
+                const remSecInBlock = blockSec - curBlockSec;
+                const bPerc = (remSecInBlock / blockSec) * 100;
+                const color = getDecayColor(bPerc);
+
+                const displayM = Math.floor(curBlockSec / 60);
+                const displayS = curBlockSec % 60;
+                document.getElementById('pomo-timer-text').textContent = `${displayM}m ${displayS.toString().padStart(2, '0')}s / ${blockMins}m`;
+                document.getElementById('pomo-timer-text').style.color = color;
+                document.getElementById('pomo-count-text').textContent = Math.floor(elapTotalSec / blockSec);
+                
+                const fill = document.getElementById('pomo-c-fill');
+                fill.setAttribute('r', (bPerc / 100) * 70);
+                fill.style.fill = color;
+            }
+
+            if (m !== lastMinute) {
+                lastMinute = m;
+                const d = now.getDate(), mo = now.getMonth(), y = now.getFullYear();
+                const dS = Math.floor((now - new Date(y, 0, 0)) / 86400000);
+                const totalD = (y % 4 === 0 && y % 100 !== 0) || (y % 400 === 0) ? 366 : 365;
+
+                document.getElementById('day-of-week').textContent = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][now.getDay()];
+                document.getElementById('days-spent').textContent = dS;
+                document.getElementById('days-rem').textContent = totalD - dS;
+                document.getElementById('current-year').textContent = y;
+                document.getElementById('year-perc').textContent = ((dS/totalD)*100).toFixed(2) + '%';
+
+                const wP = ((now.getDay() === 0 ? 6 : now.getDay() - 1) / 7 * 100) + (h/168*100);
+                document.getElementById('w-fill').style.width = wP + '%';
+                document.getElementById('w-val').textContent = Math.round(wP) + '%';
+
+                const dim = new Date(y, mo + 1, 0).getDate();
+                const mP = (d / dim) * 100;
+                document.getElementById('m-fill').style.width = mP + '%';
+                document.getElementById('m-val').textContent = Math.round(mP) + '%';
+
+                const q = getQuarterInfo(now);
+                document.getElementById('q-fill').style.width = q.p + '%';
+                document.getElementById('q-val').textContent = `Q${q.q} (${Math.round(q.p)}%)`;
+            }
+        }
+
+        document.getElementById('pomo-start').onclick = () => {
+            const now = Date.now();
+            pomoStart = now;
+            localStorage.setItem('decay_pomoStart', now);
+            const entry = document.createElement('div'); entry.className = 'log-entry';
+            entry.innerHTML = `<span>▶ ${new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span> <span>SET: ${sel.value}m</span>`;
+            document.getElementById('pomo-log-body').prepend(entry);
+            saveLog();
+        };
+
+        document.getElementById('pomo-stop').onclick = () => {
+            if (pomoStart) {
+                const block = parseInt(sel.value);
+                const earned = Math.floor((Date.now() - pomoStart) / (block * 60000)) * block;
+                dailyTotal += earned;
+                localStorage.setItem('decay_dailyTotal', dailyTotal);
+                document.getElementById('total-pomo-mins').textContent = dailyTotal;
+                const first = document.getElementById('pomo-log-body').firstChild;
+                if(first && !first.innerHTML.includes('YIELD')) {
+                    first.innerHTML += ` <span style="background:var(--bar-bg); padding:2px 5px; border-radius:3px; font-size:0.9em;">YIELD: ${earned}m</span>`;
+                }
+                pomoStart = null;
+                localStorage.removeItem('decay_pomoStart');
+                document.getElementById('active-pomo-stats').style.display = 'none';
+                document.getElementById('pomo-c-fill').setAttribute('r', 70);
+                document.getElementById('pomo-c-fill').style.fill = 'var(--text-color)';
+                saveLog();
+            }
+        };
+
+        function saveLog() { localStorage.setItem('decay_logHTML', document.getElementById('pomo-log-body').innerHTML); }
+
+        document.getElementById('mode-toggle').onclick = () => {
+            const isD = document.documentElement.classList.toggle('dark-mode');
+            localStorage.setItem('decay_theme', isD ? 'dark' : 'light');
+            document.getElementById('mode-toggle').textContent = isD ? '☀️' : '🌙';
+            update(); // Refresh colors immediately
+        };
+
+        const ruler = document.getElementById('ruler-engine');
+        for (let i = 0; i <= TOTAL_M; i += 30) {
+            const pct = (i / TOTAL_M) * 100;
+            const isM = i % 60 === 0;
+            const t = document.createElement('div'); t.className = isM ? 'tick major' : 'tick'; t.style.left = pct + '%'; ruler.appendChild(t);
+            if (isM) {
+                const l = document.createElement('div'); l.className = 'tick-label'; l.style.left = pct + '%';
+                let hr = (START_H + (i/60)) % 24; l.textContent = `${hr%12||12}${hr>=12?'PM':'AM'}`; ruler.appendChild(l);
+            }
+        }
+
+        window.onload = () => {
+            document.getElementById('pomo-log-body').innerHTML = localStorage.getItem('decay_logHTML') || '';
+            document.getElementById('total-pomo-mins').textContent = dailyTotal;
+            const grid = document.getElementById('annual-heatmap-grid');
+            const now = new Date();
+            const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            for (let m = 0; m < 12; m++) {
+                const col = document.createElement('div'); col.className = 'month-col';
+                const mGrid = document.createElement('div'); mGrid.className = 'month-grid';
+                const days = new Date(now.getFullYear(), m + 1, 0).getDate();
+                for (let d = 1; d <= days; d++) {
+                    const dot = document.createElement('div'); dot.className = 'dot';
+                    const isPast = (m < now.getMonth() || (m === now.getMonth() && d < now.getDate()));
+                    dot.classList.add(isPast ? 'past' : (m === now.getMonth() && d === now.getDate()) ? 'today' : 'future');
+                    mGrid.appendChild(dot);
+                }
+                col.appendChild(mGrid);
+                const lbl = document.createElement('span'); lbl.style.fontSize='0.6em'; lbl.style.marginTop='5px'; lbl.textContent=months[m];
+                col.appendChild(lbl); grid.appendChild(col);
+            }
+            update(); setInterval(update, 1000);
+            document.getElementById('mode-toggle').textContent = document.documentElement.classList.contains('dark-mode') ? '☀️' : '🌙';
+        };
+    </script>
+</body>
+</html>
